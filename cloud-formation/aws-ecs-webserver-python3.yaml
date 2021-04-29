@@ -573,6 +573,14 @@ Outputs:
     Description: A list of the private subnets
     Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
 
+  MyPostgreApiEcr:
+    Description: ECR Repo name
+    Value: !Ref MyPostgreApiEcr
+
+  MyPostgreApiEcrImageUri:
+    Description: ECR Repo image uri
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${MyPostgreApiEcr}:latest"
+
   MyEcrUserAccessKeys:
     Description: AccessKeyId for ECR User which can be used to upload docket image to ecr - ACCESS ONLY to single repo
     Value: !Ref MyECRUserAccessKeys
