@@ -11,17 +11,12 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://test-alb-539061888.us-east-1.elb.amazonaws.com/health ",
-					"protocol": "http",
+					"raw": "{{API_URL}}/health",
 					"host": [
-						"test-alb-539061888",
-						"us-east-1",
-						"elb",
-						"amazonaws",
-						"com"
+						"{{API_URL}}"
 					],
 					"path": [
-						"health "
+						"health"
 					]
 				}
 			},
@@ -32,16 +27,41 @@
 			"request": {
 				"method": "GET",
 				"header": [],
-				"url": null
+				"url": {
+					"raw": "{{API_URL}}/mydata",
+					"host": [
+						"{{API_URL}}"
+					],
+					"path": [
+						"mydata"
+					]
+				}
 			},
 			"response": []
 		},
 		{
 			"name": "Insert Custom data",
 			"request": {
-				"method": "GET",
+				"method": "POST",
 				"header": [],
-				"url": null
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"key1\":\"3\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{API_URL}}/mydata",
+					"host": [
+						"{{API_URL}}"
+					],
+					"path": [
+						"mydata"
+					]
+				}
 			},
 			"response": []
 		}
