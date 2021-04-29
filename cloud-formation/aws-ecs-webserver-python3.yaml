@@ -1,0 +1,586 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: This teamplate is for deploying python3 Flask web server in aws ecs
+
+Parameters:
+  EnvironmentName:
+    Description: Name of environment dev/test/prod
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+  PostgreMasterUsername:
+    Description: Master Username for PostgreSQL database
+    Type: String
+    Default: postgres
+
+  PostgreMasterPassword:
+    Description: Master Password for PostgreSQL database
+    Type: String
+    Default: gurunath9
+
+  MyVpcCidrRange:
+    Description: VPC CIDR range to use in us-east-1 aws region
+    Type: String
+    Default: 173.31.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: Public Subnet-1 CIDR range for us-east-1a
+    Type: String
+    Default: 173.31.1.0/24
+
+  PublicSubnet2CIDR:
+    Description: Public Subnet-2 CIDR range for us-east-1b
+    Type: String
+    Default: 173.31.2.0/24
+
+  PrivateSubnet1CIDR:
+    Description: private subnet-1 CIDR range for us-east-1a
+    Type: String
+    Default: 173.31.3.0/24
+
+  PrivateSubnet2CIDR:
+    Description: private subnet-2 CIDR range for us-east-1b
+    Type: String
+    Default: 173.31.4.0/24
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref MyVpcCidrRange
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "my-vpc-${EnvironmentName}"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "my-igw-${EnvironmentName}"
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1a
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "us-east-1a-public-my-vpc-${EnvironmentName}"
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1b
+      CidrBlock: !Ref PublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "us-east-1b-public-my-vpc-${EnvironmentName}"
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1a
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "us-east-1a-private-my-vpc-${EnvironmentName}"
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1b
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "us-east-1b-private-my-vpc-${EnvironmentName}"
+
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "my-private-sub-1-route-table-${EnvironmentName}"
+
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "my-private-sub-2-route-table-${EnvironmentName}"
+
+  DefaultPrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref PrivateSubnet2
+
+  PostgreDbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "postgre-db-sec-grp"
+      GroupDescription: "Security group with no ingress rule"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "postgre-db-sec-grp-${EnvironmentName}"
+
+  MySecurityGroupIngress1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref PostgreDbSecurityGroup
+      Description: !Sub "Allow access to database from public subnet - ${PublicSubnet1}"
+      IpProtocol: -1
+      FromPort: 0
+      ToPort: 65536
+      CidrIp: !Ref PublicSubnet1CIDR
+
+  MySecurityGroupIngress2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref PostgreDbSecurityGroup
+      Description: !Sub "Allow access to database from public subnet - ${PublicSubnet2}"
+      IpProtocol: -1
+      FromPort: 0
+      ToPort: 65536
+      CidrIp: !Ref PublicSubnet2CIDR
+
+  MySecurityGroupIngress3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref PostgreDbSecurityGroup
+      Description: Allow local traffic
+      IpProtocol: -1
+      FromPort: 0
+      ToPort: 65536
+      SourceSecurityGroupId: !Ref PostgreDbSecurityGroup
+
+  DBSubnetGroup1:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "DB Subnet group for PostgreSQL in my-vpc-${EnvironmentName}"
+      DBSubnetGroupName: !Sub "my-db-sec-grp-my-vpc-${EnvironmentName}"
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  MyPostGreSQL:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 20
+      AllowMajorVersionUpgrade: False
+      AutoMinorVersionUpgrade: True
+      DBInstanceClass: db.t3.micro
+      DBInstanceIdentifier: database-1
+      DBName: mypostgredb
+      DBSubnetGroupName: !Ref DBSubnetGroup1
+      DeletionProtection: False
+      DeleteAutomatedBackups: True
+      Engine: postgres
+      MasterUsername: !Ref PostgreMasterUsername
+      MasterUserPassword: !Ref PostgreMasterPassword
+      MaxAllocatedStorage: 1000
+      MultiAZ: True
+      Port: 5432
+      PubliclyAccessible: False
+      StorageEncrypted: True
+      StorageType: gp2
+      Tags:
+        - Key: Name
+          Value: !Sub "my-postgre-db-${EnvironmentName}"
+      UseDefaultProcessorFeatures: True
+      VPCSecurityGroups:
+        - !Ref PostgreDbSecurityGroup
+
+  MyEcrUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub "my-ecr-user-${EnvironmentName}"
+      Policies:
+        - PolicyName: EcrAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ["ecr:GetAuthorizationToken"]
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  [
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:BatchGetImage",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:PutImage",
+                    "ecr:UploadLayerPart",
+                  ]
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub "my-ecr-user-${EnvironmentName}"
+
+  MyECRUserAccessKeys:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref MyEcrUser
+
+  MyPostgreApiEcr:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "my-postgre-api-ecr-${EnvironmentName}"
+      RepositoryPolicyText: !Sub |
+        {
+          "Version": "2008-10-17",
+          "Statement": [
+              {                
+                "Effect": "Allow",
+                "Principal": {
+                    "AWS": [
+                        "arn:aws:iam::${AWS::AccountId}:user/${MyEcrUser}"                              
+                    ]
+                },
+                "Action": [
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:PutImage",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:GetAuthorizationToken"                   
+                ]                
+              }
+          ]
+        }
+      Tags:
+        - Key: Name
+          Value: !Sub "my-postgre-api-ecr-${EnvironmentName}"
+
+  MyAwsEcsFargateCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      CapacityProviders:
+        - FARGATE
+      ClusterName: !Sub "my-postgre-api-ecs-fargate-cluster-${EnvironmentName}"
+      Tags:
+        - Key: Name
+          Value: !Sub "my-postgre-api-ecs-fargate-cluster-${EnvironmentName}"
+
+  # MyAwsEcsServicRole:
+  #   Type: AWS::IAM::ServiceLinkedRole
+  #   Properties:
+  #     AWSServiceName: ecs.amazonaws.com
+  #     Description: Service role for amazon ecs service
+
+  MyAwsEcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "my-postgre-api-task-exec-role-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  MyAwsEcsTaskLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/my-postgre-api-task-def-${EnvironmentName}"
+      RetentionInDays: 7
+
+  MyAwsEcsFlaskTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn: MyAwsEcsTaskLogGroup
+    Properties:
+      ContainerDefinitions:
+        - Name: "my-flask-app-container"
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${MyPostgreApiEcr}:latest"
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+          MemoryReservation: 1024
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub "/ecs/my-postgre-api-task-def-${EnvironmentName}"
+              awslogs-region: !Sub "${AWS::Region}"
+              awslogs-stream-prefix: "ecs"
+          Environment:
+            - Name: POSTGRE_DB_NAME
+              Value: mypostgredb
+            - Name: POSTGRE_DB_USER
+              Value: !Ref PostgreMasterUsername
+            - Name: POSTGRE_DB_PASSWORD
+              Value: !Ref PostgreMasterPassword
+            - Name: POSTGRE_DB_HOST
+              Value: !GetAtt MyPostGreSQL.Endpoint.Address
+            - Name: POSTGRE_DB_PORT
+              Value: !GetAtt MyPostGreSQL.Endpoint.Port
+      RequiresCompatibilities:
+        - "FARGATE"
+      Cpu: 1024
+      Memory: 2048
+      ExecutionRoleArn: !Ref MyAwsEcsTaskExecutionRole
+      NetworkMode: awsvpc
+      TaskRoleArn: !Ref MyAwsEcsTaskExecutionRole
+      Tags:
+        - Key: Name
+          Value: !Sub "my-postgre-api-task-def-${EnvironmentName}"
+
+  MyAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "my-alb-sec-grp"
+      GroupDescription: "Security group with no ingress rule"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "my-alb-sec-grp-${EnvironmentName}"
+
+  AllowHttpIngress1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref MyAlbSecurityGroup
+      Description: !Sub "Allow HTTP port 80 for ALB from everywhere."
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+
+  MyLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: !Sub "my-postgre-api-alb-${EnvironmentName}"
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref MyAlbSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "my-postgre-api-alb-${EnvironmentName}"
+      Type: application
+
+  MyAlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: /health
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      Name: !Sub "ecs-target-grp-${EnvironmentName}"
+      Port: 80
+      Protocol: HTTP
+      ProtocolVersion: HTTP1
+      Tags:
+        - Key: Name
+          Value: !Sub "my-postgre-api-ecs-target-grp-${EnvironmentName}"
+      TargetType: ip
+      VpcId: !Ref VPC
+
+  MyALBListeners:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MyAlbTargetGroup
+          Order: 1
+      LoadBalancerArn: !Ref MyLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  MyAwsEcsAutoScaleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "my-postgre-api-auto-scale-role-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole
+
+  MyAwsEcsAutoScaleTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 5
+      MinCapacity: 0
+      ResourceId: !Sub "service/my-postgre-api-ecs-fargate-cluster-${EnvironmentName}/my-postgre-api-ecs-service-${EnvironmentName}"
+      RoleARN: !GetAtt MyAwsEcsAutoScaleRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  MyAwsEcsAutoScalePolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "my-postgre-api-auto-scale-policy-${EnvironmentName}"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref MyAwsEcsAutoScaleTarget
+      TargetTrackingScalingPolicyConfiguration:
+        DisableScaleIn: False
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 300
+        TargetValue: 70
+
+  MyEcsService:
+    Type: AWS::ECS::Service
+    DependsOn: MyALBListeners
+    Properties:
+      #Role: !Ref MyAwsEcsServicRole
+      Cluster: !Ref MyAwsEcsFargateCluster
+      DesiredCount: 0
+      LaunchType: FARGATE
+      EnableECSManagedTags: True
+      LoadBalancers:
+        - TargetGroupArn: !Ref MyAlbTargetGroup
+          ContainerPort: 80
+          ContainerName: my-flask-app-container
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref MyAlbSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
+      SchedulingStrategy: REPLICA
+      ServiceName: !Sub "my-postgre-api-ecs-service-${EnvironmentName}"
+      Tags:
+        - Key: Name
+          Value: !Sub "my-postgre-api-ecs-service-${EnvironmentName}"
+      TaskDefinition: !Ref MyAwsEcsFlaskTaskDef
+
+Outputs:
+  VPC:
+    Description: Created VPC
+    Value: !Ref VPC
+
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+
+  MyEcrUserAccessKeys:
+    Description: AccessKeyId for ECR User which can be used to upload docket image to ecr - ACCESS ONLY to single repo
+    Value: !Ref MyECRUserAccessKeys
+
+  MyEcrUserSecretAccessKey:
+    Description: SecretAccessKey for ECR User which can be used to upload docket image to ecr- ACCESS ONLY to single repo
+    Value: !GetAtt MyECRUserAccessKeys.SecretAccessKey
+
+  MyLoadBalancer:
+    Description: Load Balancer url
+    Value: !Sub "http://${MyLoadBalancer.DNSName}"

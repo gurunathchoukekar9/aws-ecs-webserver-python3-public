@@ -1,0 +1,15 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "description": "guru",
+        "version": "1.0.0",
+        "title": "Seans-Python3-Flask-Rest-Boilerplate",
+        "contact": {
+            "email": "guru-aws-ecs-webserver-python3"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        }
+    }
+}
